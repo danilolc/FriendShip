@@ -3,10 +3,14 @@ INCLUDE "definitions/memory.inc"
 
 SECTION "vblank",ROM0[$40]
 VBLANKI:
+;  jp VBLANK_dec_e
   jp VBLANKF_wram
 
 VBLANKF_rom:
-  jp $0000
+  jp VBLANK_Nothing ; It'll be copyed to wram
+
+VBLANK_Nothing:
+  reti
 
 SECTION "lcdc",ROM0[$48]
 LCDI:
@@ -69,13 +73,7 @@ SetSmallMem:
 start:
   di 
 
-  .waitvblank:
-  ld a, [rLY]
-  cp 144
-  jr c, .waitvblank
-
-  xor	a
-  ld [rLCDC], a ; Turn off screen
+  call WaitAndShutdownScreen
 
   ; Copy DMA function to HRAM
   ld de, OAMF_rom
@@ -88,7 +86,20 @@ start:
   ld hl, VBLANKF_wram
   ld b, 3
   call CopySmallMem
-  
+
+  jr InitLogo
+
+WaitAndShutdownScreen:
+  .waitvblank:
+  ld a, [rLY]
+  cp 144
+  jr c, .waitvblank
+
+  xor	a
+  ld [rLCDC], a ; Turn off screen
+  ret
+;
+
 InitLogo:
   
   ; Set white screen
@@ -96,18 +107,28 @@ InitLogo:
   ld [rBGP], a
 
   ; Copy tiles
+  ld de, SD_tiles
+  ld hl, $8000
+  ld bc, SD_tiles_end - SD_tiles
+  call CopyMem
+
   ; Copy map
+  ld de, SD_map
+  ld hl, $9c00
+  ld bc, SD_map_end - SD_map
+  call CopyMem
 
-  ; Show screen
-
-  ; Change jump from VBLANK WRAM
+  ; Change jump on VBLANK WRAM
   ld hl, VBLANKF_wram + 1
   ld a, LOW(VBLANK_dec_e)
   ld [hli], a
   ld a, HIGH(VBLANK_dec_e)
   ld [hli], a
 
-
+  ; Start screen
+  ld a, LCDCF_BGON | LCDCF_ON
+  ld [rLCDC], a
+  
   ; Clear interrupt flags (needed?)
   xor a; (-) a is already 0
   ld [rIF], a 
@@ -116,9 +137,6 @@ InitLogo:
   ld a, IEF_VBLANK; (-) or waitvblank;
   ld [rIE], a
   ei
-
-  ld a, LCDCF_ON | LCDCF_BGON
-  ld [rLCDC], a
 
   call FadeIn
 
@@ -177,11 +195,12 @@ WaitFrames:
   halt
   jr nz, .stillwaiting
   ret
-
+;
 
 VBLANK_dec_e:
   dec e
   reti
+;
 
 Init_Title: ; Call it on VBLANK
   di
@@ -394,3 +413,11 @@ AMP = 20.0
   FOR N, 256        
       db (MUL(AMP, SIN(N * 256)) + AMP) >> 16
   ENDR
+
+SD_map:   
+  INCBIN "gfx/sd_map.bin"   
+SD_map_end:
+
+SD_tiles: 
+  INCBIN "gfx/sd_tiles.bin"
+SD_tiles_end: 
