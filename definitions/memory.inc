@@ -2,9 +2,9 @@ SECTION "hram0", HRAM
 hTransition:
   db
 
-dmaCopyHRAM:
+OAMF_hram:
   ds 5
-dmaCopyHRAM_end:
+OAMF_hram_end:
   
 SECTION "wram0", WRAM0
 Screen1X:
@@ -23,3 +23,7 @@ Screen2C:
   
 Position:
   db
+
+
+VBLANKF_wram:
+  ds 3
