@@ -4,6 +4,10 @@ rLogoTransition:
 
 rButtons:
   db
+rButtons_Old:
+  db
+rButtons_High:
+  db
 
 OAMF_hram:
   ds 5

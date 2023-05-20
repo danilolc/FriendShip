@@ -366,16 +366,15 @@ Init_Title: ; Call it on VBLANK
   .loop
   halt
 
-  ld a, [rButtons]
+  ld a, [rButtons_High]
   cp $0
   jr z, .return
 
-  ;call Spawn_Gas
+  call Spawn_Gas
   
   .return:
 
-  xor a
-  ld [rButtons], a
+  call UpdateGas
 
   jr .loop
 ;
@@ -570,7 +569,7 @@ VBLANK_title_wait:
 
   ;;ld b, 12
   ;;call ClearOAMEntries
-  ld c, 17
+  ld c, 16
   .loop:
   call LoadGas_OAMS
   dec c
@@ -630,6 +629,8 @@ Init_in_game:
 ;
 
 VBLANK_in_game:
+
+  call dmaCopy
 
   call ReadShipMoveButton
 
@@ -691,42 +692,156 @@ ReadShipMoveButton:
   rla
   rla
   add b
+  ld b, a
+  ; b <- current buttons
 
+  ld a, [rButtons]
+  ld [rButtons_Old], a
+
+  ld c, a
+  xor b
+  and c
+  ld [rButtons_High], a ; <- if b button 0 and old button is 1
+
+  ld a, b
   ld [rButtons], a
 
   ret
 
+MoveShip:
+
 
 UpdateGas:
   ld a, [GasCount]
-  ret
 
-; b: 0 - left, 1 - right
-Spawn_Gas:
+  ld hl, OAM_Data_wram + $18
+  ld bc, 4
+  
+  .loop
+  ld a, [hl] ; Y position
+  cp 0
+  jr z, .next
+
+  ;; update gas
+  inc a
+  inc a
+  cp 140
+  jr c, .not_finished
+
+  di
+  call WaitAndShutdownScreen
+  call Init_Title
 
   ld a, [GasCount]
+  dec a
+  ld [GasCount], a
+  xor a
 
-  ; if GasCount == 17 return
-  cp $17
-  jr z, .return
 
-  rlca ; a *= 2
+  .not_finished
+  
+  ld [hl], a
+  add hl, bc
+  ld [hl], a
+  add hl, bc
 
-  ld h, HIGH(OAM_Data_wram)
-  ld l, a
+  jr .checkend
 
-  ;call LoadGas_OAMS
+  .next
+  add hl, bc
+  add hl, bc
+  
+  .checkend
+  ; if l == end, return
+  ld a, $18 + (16 * 8)
+  cp l
+  ret z
 
-  ;; Set x y
+  jr .loop
 
-  .return
+
+DIST = 26
+POS1 = 40 + 4
+POS2 = 110 + 4
+  
+Pos0:
+  ld c, POS2 + DIST
   ret
 
+Pos1:
+  ld c, POS2 - DIST
+  ret
 
+Pos2:
+  ld c, POS1 + DIST
+  ret
 
+Pos3:
+  ld c, POS1 - DIST
+  ret
 
+; <>ba
+; 0000 <- d
+ResetGasXY: ; hl gas oam
 
+  ; Calc pos x
+  bit 0, c
+  call nz, Pos0 
+  bit 1, c
+  call nz, Pos1
+  bit 2, c
+  call nz, Pos2
+  bit 3, c
+  call nz, Pos3
 
+  ld a, $01
+  ld [hli], a ; Y
+  ld a, c
+  ld [hli], a ; X
+
+  inc l
+  inc l
+  ld a, $01
+  ld [hli], a ; Y
+  ld a, c
+  add 8
+  ld [hli], a ; X
+
+  ret
+
+; <>ba
+; 0000 <- d
+Spawn_Gas:
+  ld a, [GasCount]
+  cp 16
+  ret z
+
+  ld c, %01000000
+
+  inc a
+  ld [GasCount], a
+
+  ld bc, 8
+  ld hl, OAM_Data_wram + $18
+  ld d, 0 ; free gas index
+
+  .loop
+    ld a, [hl]
+    cp $00
+    jr z, .found_free_gas
+    add hl, bc ; hl += 8
+    inc d
+
+    ; if d == 16 return No free gas
+    ld a, 16
+    cp d
+    ret z
+
+  jr .loop
+
+  .found_free_gas: ; at d
+
+  jp ResetGasXY
 
 
 VBlank_Intro:
@@ -884,3 +999,13 @@ ATT = %00010000 ; att 7 - bellow bg, 6 - Y flip, 5 - X flip, 4 - palette
     db ATT   
   ENDR
 GAS_OAMS_end:
+
+HEARH_OAMS:
+ATT = %00010000 ; att 7 - bellow bg, 6 - Y flip, 5 - X flip, 4 - palette
+  FOR N, 2
+    db 0 
+    db 0 
+    db $BE + N*2 
+    db ATT   
+  ENDR
+HEARH_OAMS_end:
