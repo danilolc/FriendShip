@@ -1,16 +1,18 @@
 INCLUDE "definitions/hardware.inc"
 INCLUDE "definitions/memory.inc"
 
-SECTION "vblank",ROM0[$40]
-VBLANKI:
-;  jp VBLANK_dec_e
-  jp VBLANKF_wram
-
+SECTION "begin",ROM0[$0]
 VBLANKF_rom:
   jp VBLANK_Nothing ; It'll be copyed to wram
 
 VBLANK_Nothing:
   reti
+
+SECTION "vblank",ROM0[$40]
+VBLANKI:
+;  jp VBLANK_dec_e
+  jp VBLANKF_wram
+
 
 SECTION "lcdc",ROM0[$48]
 LCDI:
@@ -357,7 +359,8 @@ Init_Title: ; Call it on VBLANK
   call VBLANK_title_in ; Turn on screen and interupts
 
   .haltLoop: ; Keep here while not in game
-  halt
+  nop;halt
+  ;call DS_Play
   ld a, [InGame]
   bit 0, a
   jr z, .haltLoop
@@ -366,18 +369,256 @@ Init_Title: ; Call it on VBLANK
   .loop
   halt
 
-  ld a, [rButtons_High]
-  cp $0
-  jr z, .return
+  ld a, [TickCount_old]
+  ld b, a
+  ld a, [TickCount]
+  ld [TickCount_old], a
+  cp b
+  jr z, .done  
+  add 4
+  and %111
+  call z, ReadGasVector
 
-  call Spawn_Gas
-  
+  .done:
+
+  ;    <>ba
+  ld a, [rButtons_High]
+  bit 0, a ; A
+  call nz, MoveShip2_Right
+  bit 1, a ; B
+  call nz, MoveShip2_Left
+  bit 2, a ; >
+  call nz, MoveShip1_Right
+  bit 3, a ; <
+  call nz, MoveShip1_Left
+
+  call UpdateShips
+
   .return:
 
+  call DS_Play
   call UpdateGas
 
   jr .loop
 ;
+
+TIME = 20
+;%10000000
+
+MoveShip2_Right:
+  push af
+  ld a, [Ship2_PosXTimer]
+  cp a, $0
+  jr nz, .return
+
+  ld a, TIME
+  ld [Ship2_PosXTimer], a
+
+  ld a, 0
+  ld [Ship2_Direction], a
+
+  ld a, [TickCount]
+  ld [Ship2_PosXTicks], a
+
+  .return:
+  pop af
+  ret
+
+MoveShip1_Right:
+  push af
+  ld a, [Ship1_PosXTimer]
+  cp a, $0
+  jr nz, .return
+
+  ld a, TIME
+  ld [Ship1_PosXTimer], a
+
+  ld a, 0
+  ld [Ship1_Direction], a
+  
+  ld a, [TickCount]
+  ld [Ship1_PosXTicks], a
+
+  .return:
+  pop af
+  ret
+
+MoveShip2_Left:
+  push af
+  ld a, [Ship2_PosXTimer]
+  cp a, $0
+  jr nz, .return
+
+  ld a, TIME
+  ld [Ship2_PosXTimer], a
+
+  ld a, 1
+  ld [Ship2_Direction], a
+  
+  ld a, [TickCount]
+  ld [Ship2_PosXTicks], a
+.return:
+  pop af
+  ret
+MoveShip1_Left:
+  push af
+  ld a, [Ship1_PosXTimer]
+  cp a, $0
+  jr nz, .return
+
+  ld a, TIME
+  ld [Ship1_PosXTimer], a
+
+  ld a, 1
+  ld [Ship1_Direction], a
+  
+  ld a, [TickCount]
+  ld [Ship1_PosXTicks], a
+
+  .return:
+  pop af
+  ret
+
+UpdateShip1:
+  ld a, [Ship1_PosXTimer]
+  cp 0
+  ret z
+  sub 2
+  ld [Ship1_PosXTimer], a
+
+  ld a, [Ship1_PosXTimer]
+  ret
+
+UpdateShip2:
+  ld a, [Ship2_PosXTimer]
+  cp 0
+  ret z
+  sub 2
+  ld [Ship2_PosXTimer], a
+
+  ld a, [Ship2_PosXTimer]
+  ret
+
+UpdateShips:
+  call UpdateShip1
+  call UpdateShip2
+
+  call MoveShip1
+  call MoveShip2
+  ret
+
+MoveShip1:
+
+  ld a, [Ship1_PosXTimer]
+  ld c, a
+
+  ld a, [Ship1_Direction]
+  ld d, a
+
+  ld a, SHIP1X
+
+  dec d
+  jr z, .one
+  
+  add c
+  jr .done
+
+  .one:
+  
+  sub c
+  
+  .done
+
+  ld hl, OAM_Data_wram + 1 ;SHIP1X
+  ld bc, 4
+
+  ld [hl], a
+  add hl, bc
+  add 8
+  ld [hl], a
+  add 8
+  add hl, bc
+  ld [hl], a
+
+  ret
+
+
+
+
+
+
+
+MoveShip2:
+
+  ld a, [Ship2_PosXTimer]
+  ld c, a
+
+  ld a, [Ship2_Direction]
+  ld d, a
+
+  ld a, SHIP2X
+
+  dec d
+  jr z, .one
+  
+  add c
+  jr .done
+
+  .one:
+  
+  sub c
+  
+  .done
+
+  ld hl, OAM_Data_wram + $0C + 1 ;SHIP2X
+  ld bc, 4
+
+  ld [hl], a
+  add hl, bc
+  add 8
+  ld [hl], a
+  add 8
+  add hl, bc
+  ld [hl], a
+
+  ret
+
+
+
+
+ReadGasVector:
+
+  ; Increment gas vector position
+  ld a, [GasVectorPosition]
+  ld hl, GasPositions
+
+  inc a
+  cp a, GasPositions_end - GasPositions
+  jr nz, .dont_reset
+  xor a
+  .dont_reset
+  ld [GasVectorPosition], a
+
+  ld c, a
+  ld b, 0
+  add hl, bc
+
+  ld hl, GasPositions
+  ld c, a
+  ld b, 0
+  add hl, bc
+  ld a, [hl]
+  ld e, a
+
+  bit 0, e
+  call nz, Spawn_Gas1
+  bit 1, e
+  call nz, Spawn_Gas2
+  bit 2, e
+  call nz, Spawn_Gas3
+  bit 3, e
+  call nz, Spawn_Gas4
+  ret
 
 CopyMem: ; de: src, hl: dst, bc: size
   ld a, [de]
@@ -621,9 +862,20 @@ Init_in_game:
 
   xor a
   ld [GasCount], a
+  ld [TickCount_old], a
+  ld [GasVectorPosition], a
+
+  ld [Ship1_Direction], a
+  ld [Ship1_PosXTimer], a
+  ld [Ship2_Direction], a
+  ld [Ship2_PosXTimer], a
+
 
   ld a, IEF_VBLANK
   ld [rIE], a
+
+  ld a, 3  ; replace SongID with the ID of the song you want to load
+  call DS_Init
 
   ret
 ;
@@ -698,17 +950,15 @@ ReadShipMoveButton:
   ld a, [rButtons]
   ld [rButtons_Old], a
 
-  ld c, a
-  xor b
-  and c
-  ld [rButtons_High], a ; <- if b button 0 and old button is 1
+  cpl
+  and b
+  ld [rButtons_High], a
 
   ld a, b
   ld [rButtons], a
 
   ret
 
-MoveShip:
 
 
 UpdateGas:
@@ -725,21 +975,24 @@ UpdateGas:
   ;; update gas
   inc a
   inc a
-  cp 140
-  jr c, .not_finished
+  cp 161
+  jr c, .not_finished  
 
-  di
-  call WaitAndShutdownScreen
-  call Init_Title
+  ;; GO BACK TO TITLE
+  ;di
+  ;call WaitAndShutdownScreen
+  ;call DS_Stop
+  ;call Init_Title
 
   ld a, [GasCount]
   dec a
   ld [GasCount], a
   xor a
 
-
   .not_finished
-  
+
+  call CompareDistanceFromShips
+
   ld [hl], a
   add hl, bc
   ld [hl], a
@@ -760,63 +1013,82 @@ UpdateGas:
   jr .loop
 
 
+; hl gas
+CompareDistanceFromShips:
+  ret
+
 DIST = 26
 POS1 = 40 + 4
 POS2 = 110 + 4
+
+Spawn_Gas1:
+  call Spawn_Gas
   
-Pos0:
-  ld c, POS2 + DIST
-  ret
-
-Pos1:
-  ld c, POS2 - DIST
-  ret
-
-Pos2:
-  ld c, POS1 + DIST
-  ret
-
-Pos3:
-  ld c, POS1 - DIST
-  ret
-
-; <>ba
-; 0000 <- d
-ResetGasXY: ; hl gas oam
-
-  ; Calc pos x
-  bit 0, c
-  call nz, Pos0 
-  bit 1, c
-  call nz, Pos1
-  bit 2, c
-  call nz, Pos2
-  bit 3, c
-  call nz, Pos3
-
   ld a, $01
   ld [hli], a ; Y
-  ld a, c
+  ld a, POS1 - DIST
   ld [hli], a ; X
 
   inc l
   inc l
   ld a, $01
   ld [hli], a ; Y
-  ld a, c
-  add 8
+  ld a, POS1 - DIST + 8
+  ld [hli], a ; X
+  ret
+  
+Spawn_Gas2:
+  call Spawn_Gas
+  
+  ld a, $01
+  ld [hli], a ; Y
+  ld a, POS1 + DIST
   ld [hli], a ; X
 
+  inc l
+  inc l
+  ld a, $01
+  ld [hli], a ; Y
+  ld a, POS1 + DIST + 8
+  ld [hli], a ; X
   ret
 
-; <>ba
-; 0000 <- d
+Spawn_Gas3:
+  call Spawn_Gas
+  
+  ld a, $01
+  ld [hli], a ; Y
+  ld a, POS2 - DIST
+  ld [hli], a ; X
+
+  inc l
+  inc l
+  ld a, $01
+  ld [hli], a ; Y
+  ld a, POS2 - DIST + 8
+  ld [hli], a ; X
+  ret
+
+Spawn_Gas4:
+  call Spawn_Gas
+  
+  ld a, $01
+  ld [hli], a ; Y
+  ld a, POS2 + DIST
+  ld [hli], a ; X
+
+  inc l
+  inc l
+  ld a, $01
+  ld [hli], a ; Y
+  ld a, POS2 + DIST + 8
+  ld [hli], a ; X
+  ret
+
 Spawn_Gas:
   ld a, [GasCount]
   cp 16
   ret z
-
-  ld c, %01000000
 
   inc a
   ld [GasCount], a
@@ -840,15 +1112,14 @@ Spawn_Gas:
   jr .loop
 
   .found_free_gas: ; at d
-
-  jp ResetGasXY
+  ret
 
 
 VBlank_Intro:
   reti 
 ;
 
-SECTION "Data", ROM0[$500] ; TODO - align
+SECTION "Data", ROM0[$700] ; TODO - align
 HVector:
   db $ff, $ff, $00, $ff, $00, $00, $00, $00 ;   8
   db $00, $00, $00, $00, $00, $00, $00, $00 ;  16
@@ -871,6 +1142,22 @@ AMP = 15.0
       db (MUL(AMP, SIN(N * 256)) + AMP) >> 16
   ENDR
 
+
+GasPositions:
+
+  db  %1000, %0001, %1000, %0001
+  db  %0001, %1000, %0001, %0001
+
+  db  %1000, %0001, %1000, %0001
+  db  %0001, %1000, %0001, %0001
+
+  db  %1001, %0100, %1001, %0010
+  db  %0010, %1001, %0100, %1001
+
+  db  %0101, %1010, %0101, %1010
+  db  %1010, %0101, %1010, %0101
+
+GasPositions_end:
 
 ;; SPLASH
 SD_tiles: 
@@ -1009,3 +1296,5 @@ ATT = %00010000 ; att 7 - bellow bg, 6 - Y flip, 5 - X flip, 4 - palette
     db ATT   
   ENDR
 HEARH_OAMS_end:
+
+include "DevSound.asm"

@@ -2,6 +2,8 @@ SECTION "hram0", HRAM
 rLogoTransition:
   db
 
+;    <>ba
+;00000000 <- a
 rButtons:
   db
 rButtons_Old:
@@ -42,10 +44,18 @@ Screen2C:
 
 
 ;;;;;;;;;;;;;;; Spaceship
+Ship1_Direction:
+  db
 Ship1_PosXTimer:  ; Timer: bit 7 direction, bit 6-0 timer
   db
+Ship1_PosXTicks:
+  db
 
-Ship2_PosYTimer:
+Ship2_Direction:
+  db
+Ship2_PosXTimer:
+  db
+Ship2_PosXTicks:
   db
 
 Frame_Counter: ; Used to repeating actions, like "press start" blinking
@@ -60,8 +70,11 @@ InGame:
 GasCount:
   db
 
+TickCount_old:
+  db
 
-
+GasVectorPosition:
+  db
 
 VBLANKF_wram:
   ds 3

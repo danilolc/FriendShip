@@ -11,14 +11,11 @@ PNG_FILES_TILES = $(addsuffix _tiles.bin, $(PNG_NAMES))
 
 all: output.gb
 
-output.gb: main.asm.o
-	@rgblink -o $@ --map output.map main.asm.o
-	@rgbfix -v $@ -p 0xff
-	@echo DONE!
-
-main.asm.o: main.asm
-	@echo ASSEMBLING
-	@rgbasm $^ -o $@ -l -H
+output.gb: %.asm %.inc %.bin
+	rgbasm $^ -o $@ -l -H
+	rgblink -o $@ --map output.map main.asm.o
+	rgbfix -v $@ -p 0xff
+	@echo DONE!	
 
 main.asm: $(PNG_FILES_TILES) 
 	@echo a
