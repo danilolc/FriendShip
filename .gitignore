@@ -6,4 +6,5 @@
 *.4bpp
 
 /bin/
+/build/
 

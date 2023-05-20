@@ -1,12 +1,26 @@
 SECTION "hram0", HRAM
-hTransition:
+rLogoTransition:
+  db
+
+rButtons:
   db
 
 OAMF_hram:
   ds 5
-OAMF_hram_end:
   
 SECTION "wram0", WRAM0
+OAM_Data_wram:
+  ds 160
+
+MACRO setvblanki
+  ld hl, VBLANKF_wram + 1
+  ld a, LOW(\1)
+  ld [hli], a
+  ld a, HIGH(\1)
+  ld [hli], a
+ENDM
+
+;;;;;;;;;;;;;;; LOGO Screens
 Screen1X:
   db
 Screen1Y:
@@ -20,9 +34,27 @@ Screen2Y:
   db
 Screen2C:
   db
-  
-Position:
+;;;;;;;;;;;;;;;
+
+
+;;;;;;;;;;;;;;; Spaceship
+Ship1_PosXTimer:  ; Timer: bit 7 direction, bit 6-0 timer
   db
+
+Ship2_PosYTimer:
+  db
+
+Frame_Counter: ; Used to repeating actions, like "press start" blinking
+  db
+;;;;;;;;;;;;;;;
+
+
+;;;;;;;;;;;;;;;
+InGame:
+  db
+
+
+
 
 
 VBLANKF_wram:
