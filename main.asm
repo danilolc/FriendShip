@@ -46,11 +46,26 @@ _LCDI:
   ld hl, Screen1X
   
   .setvalues:
+
   ld a, [hli]
-  ld [rSCX], a
+  ld b, a ; X
   ld a, [hli]
-  ld [rSCY], a
+  ld c, a ; Y
   ld a, [hli]
+  ld d, a ; S
+  ld hl, rSCY
+  
+  .waitmode3:
+  ld a, [rSTAT]
+  cpl
+  and %11
+  jr z, .waitmode3
+
+  ld a, c
+  ld [hli], a
+  ld a, b
+  ld [hl], a
+  ld a, d
   ld [rLCDC], a
 
   ; Return LCDI
@@ -281,6 +296,19 @@ Init_Title: ; Call it on VBLANK
   ld bc, Stars_map_end - Stars_map
   call CopyMem
 
+
+  ; Copy text tiles
+  ld de, Text_tiles
+  ld hl, $8800
+  ld bc, Text_tiles_end - Text_tiles
+  call CopyMem
+
+  ; Copy object tiles
+  ld de, Objects_tiles
+  ld hl, $8b00
+  ld bc, Objects_tiles_end - Objects_tiles
+  call CopyMem
+
   xor a
   ld [Screen1X], a
   ld [Screen1Y], a
@@ -317,7 +345,7 @@ Init_Title: ; Call it on VBLANK
   setvblanki VBLANK_title_in
 
   ; Set MODE0 (hblank) as STAT interrupt
-  ld a, STATF_MODE00
+  ld a, STATF_MODE10 ;STATF_MODE00
   ld [rSTAT], a
 
   ; Turn on LCDC (STAT) and VBLANK interupts
@@ -334,8 +362,21 @@ Init_Title: ; Call it on VBLANK
   bit 0, a
   jr z, .haltLoop
 
+  ;;;;;;;; IN GAME
   .loop
   halt
+
+  ld a, [rButtons]
+  cp $0
+  jr z, .return
+
+  ;call Spawn_Gas
+  
+  .return:
+
+  xor a
+  ld [rButtons], a
+
   jr .loop
 ;
 
@@ -383,6 +424,32 @@ OAMF_rom:
   jr nz, .wait
   ret
 ;
+
+LoadPressStart_OAMS:
+  ld de, Text_OAMS
+  ld b, Text_OAMS_end - Text_OAMS
+  jr CopySmallMem ; de: src, hl: dst, b: size
+
+LoadDirection_OAMS:
+  ld de, DIRECTION_OAMS
+  ld b, DIRECTION_OAMS_end - DIRECTION_OAMS
+  jr CopySmallMem ; de: src, hl: dst, b: size
+
+LoadShip1_OAMS:
+  ld de, SHIP1_OAMS
+  ld b, SHIP1_OAMS_end - SHIP1_OAMS  
+  jr CopySmallMem ; de: src, hl: dst, b: size
+
+LoadShip2_OAMS:
+  ld de, SHIP2_OAMS
+  ld b, SHIP2_OAMS_end - SHIP2_OAMS  
+  jr CopySmallMem ; de: src, hl: dst, b: size
+
+LoadGas_OAMS:
+  ld de, GAS_OAMS
+  ld b, GAS_OAMS_end - GAS_OAMS
+  jr CopySmallMem ; de: src, hl: dst, b: size
+
 
 SetScreen2XY: ; x = sin, y = -frame_counter
   ; Increment frame counter
@@ -432,6 +499,17 @@ VBLANK_title_in:
   jr nz, .not_zero
   
   setvblanki VBLANK_title_wait
+  ld hl, OAM_Data_wram
+  call LoadPressStart_OAMS
+  call LoadDirection_OAMS
+  call LoadShip1_OAMS
+  call LoadShip2_OAMS
+
+  ld a, %00011011
+  ld [rOBP0], a
+  ld a, %00011011;%11100100
+  ld [rOBP1], a
+  
   jr .return
 
   .not_zero:
@@ -450,23 +528,60 @@ VBLANK_title_in:
   reti
 ;
 
+ClearOAMEntries: ; b - entries, hl - position
+  xor a
+  sla b
+  sla b
+  call SetSmallMem
+  ret
+
 VBLANK_title_wait:
   push af
   push hl 
   
+  call dmaCopy
   call SetScreen2XY
   call SetScreen2
+
+  ld a, [Frame_Counter]
+  bit 4, a
+  jr z, .pal2
+
+  ld a, %00011111
+  ld [rOBP0], a
+
+  jr .endpal
+
+  .pal2:
+
+  ld a, %00001010
+  ld [rOBP0], a
+
+  .endpal:
 
   call ReadStartButton
   jr nz, .no_start
 
   setvblanki VBLANK_title_out
 
+  ld hl, OAM_Data_wram
+  call LoadShip1_OAMS
+  call LoadShip2_OAMS
+
+  ;;ld b, 12
+  ;;call ClearOAMEntries
+  ld c, 17
+  .loop:
+  call LoadGas_OAMS
+  dec c
+  jr nz, .loop
+
   .no_start
 
   pop hl
   pop af
   reti
+;
 
 VBLANK_title_out:
   call dmaCopy
@@ -482,7 +597,6 @@ VBLANK_title_out:
   
   setvblanki VBLANK_in_game
   call Init_in_game
-  
   jr .return
 
   .not_zero:
@@ -506,17 +620,22 @@ Init_in_game:
   ld a, $01
   ld [InGame], a
 
+  xor a
+  ld [GasCount], a
+
   ld a, IEF_VBLANK
   ld [rIE], a
 
   ret
-
+;
 
 VBLANK_in_game:
+
   call ReadShipMoveButton
+
   call SetScreen2XY
   call SetScreen2
-  
+
   reti
 
 
@@ -543,7 +662,7 @@ ReadStartButton:
   ret
 
 ;    <>ba
-;00000000
+;00000000 <- a
 ReadShipMoveButton:
   ld hl, rP1
 
@@ -578,8 +697,30 @@ ReadShipMoveButton:
   ret
 
 
+UpdateGas:
+  ld a, [GasCount]
+  ret
 
+; b: 0 - left, 1 - right
+Spawn_Gas:
 
+  ld a, [GasCount]
+
+  ; if GasCount == 17 return
+  cp $17
+  jr z, .return
+
+  rlca ; a *= 2
+
+  ld h, HIGH(OAM_Data_wram)
+  ld l, a
+
+  ;call LoadGas_OAMS
+
+  ;; Set x y
+
+  .return
+  ret
 
 
 
@@ -592,7 +733,7 @@ VBlank_Intro:
   reti 
 ;
 
-SECTION "Data", ROM0[$400] ; TODO - align
+SECTION "Data", ROM0[$500] ; TODO - align
 HVector:
   db $ff, $ff, $00, $ff, $00, $00, $00, $00 ;   8
   db $00, $00, $00, $00, $00, $00, $00, $00 ;  16
@@ -615,6 +756,8 @@ AMP = 15.0
       db (MUL(AMP, SIN(N * 256)) + AMP) >> 16
   ENDR
 
+
+;; SPLASH
 SD_tiles: 
   INCBIN "build/sd_tiles.bin"
 SD_tiles_end: 
@@ -632,6 +775,7 @@ Penguin_tiles:
 Penguin_tiles_end:
 
 
+;; INTRO
 Stars_tiles: 
   INCBIN "build/stars_tiles.bin"
 Stars_tiles_end:
@@ -645,3 +789,98 @@ Logo_tiles_end:
 Logo_map: 
   INCBIN "build/logo_map.bin"
 Logo_map_end:
+
+
+
+;; OAM
+Text_tiles: ; $8800 (first index $80)
+  INCBIN "oam/text.2bpp"
+Text_tiles_end:
+
+Objects_tiles:
+  INCBIN "oam/objects.2bpp"
+Objects_tiles_end:
+
+
+
+Text_OAMS:
+POSX = 55
+POSY = 85
+INDEX1 = $A0
+ATT = %00000000 ; att 7 - bellow bg, 6 - Y flip, 5 - X flip, 4 - palette
+    FOR N, 8
+      db POSY 
+      db POSX + N*8 
+      db INDEX1 + N*2 
+      db ATT
+    ENDR
+Text_OAMS_end:
+
+
+SHIP1X = 40
+SHIP2X = 110
+SHIPY = 120
+
+DIRECTION_OAMS:
+DIST = 22
+ATT = 0
+A_OAM:
+    db SHIPY + 5
+    db SHIP2X + DIST + 8
+    db $C8
+    db ATT   
+  A_OAM_end:
+  B_OAM:
+    db SHIPY + 5
+    db SHIP2X - DIST + 8
+    db $CA 
+    db ATT   
+  B_OAM_end:
+  L_OAM:
+    db SHIPY + 5
+    db SHIP1X - DIST + 8
+    db $CC 
+    db ATT   
+  L_OAM_end:
+  R_OAM:
+    db SHIPY + 5
+    db SHIP1X + DIST + 8
+    db $CE 
+    db ATT   
+  R_OAM_end:
+DIRECTION_OAMS_end:
+
+SHIP1_OAMS:
+POSY = 120
+INDEX1 = $B0
+ATT = %00010000 ; att 7 - bellow bg, 6 - Y flip, 5 - X flip, 4 - palette
+  FOR N, 3
+    db POSY 
+    db SHIP1X + N*8 
+    db INDEX1 + N*2 
+    db ATT  
+  ENDR
+SHIP1_OAMS_end:
+
+SHIP2_OAMS:
+POSX = 110
+POSY = 120
+INDEX1 = $B6
+ATT = %00010000 ; att 7 - bellow bg, 6 - Y flip, 5 - X flip, 4 - palette
+  FOR N, 3
+    db POSY 
+    db SHIP2X + N*8 
+    db INDEX1 + N*2 
+    db ATT   
+  ENDR
+SHIP2_OAMS_end:
+
+GAS_OAMS:
+ATT = %00010000 ; att 7 - bellow bg, 6 - Y flip, 5 - X flip, 4 - palette
+  FOR N, 2
+    db 0 
+    db 0 
+    db $C4 + N*2 
+    db ATT   
+  ENDR
+GAS_OAMS_end:

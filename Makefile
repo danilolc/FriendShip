@@ -1,4 +1,4 @@
-# Add OAMS
+# Add OAM
 # Add sound (music, sfx)
 # Game logic
 

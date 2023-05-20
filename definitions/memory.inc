@@ -53,6 +53,8 @@ Frame_Counter: ; Used to repeating actions, like "press start" blinking
 InGame:
   db
 
+GasCount:
+  db
 
 
 
