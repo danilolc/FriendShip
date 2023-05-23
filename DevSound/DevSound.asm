@@ -27,7 +27,7 @@ UseFXHammer	= 1
 
 DevSound:
 
-include	"DevSound_Defines.inc"
+include	"DevSound/DevSound_Defines.inc"
 
 SECTION	"DevSound",ROMX
 
@@ -2208,4 +2208,4 @@ DummyChannel:
 ; Song data
 ; ================================================================
 
-	include	"DevSound_SongData.asm"
+	include	"DevSound/DevSound_SongData.asm"

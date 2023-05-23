@@ -1,6 +1,9 @@
 INCLUDE "definitions/hardware.inc"
 INCLUDE "definitions/memory.inc"
 
+; TODO - organize function positions
+; de may be changed by interruptions
+
 SECTION "begin",ROM0[$0]
 VBLANKF_rom:
   jp VBLANK_Nothing ; It'll be copyed to wram
@@ -10,19 +13,10 @@ VBLANK_Nothing:
 
 SECTION "vblank",ROM0[$40]
 VBLANKI:
-;  jp VBLANK_dec_e
   jp VBLANKF_wram
 
-
 SECTION "lcdc",ROM0[$48]
-LCDI:
-  jr _LCDI
-  
-SECTION "timer",ROM0[$50]
-Timer:
-	reti
-
-_LCDI:
+LCDI: ; TODO - at line L, enable this interrupt and read a vector directely
   push af
   push hl
   
@@ -81,6 +75,23 @@ SECTION "entry", ROM0[$100]
   jr start
 
 SECTION "main", ROM0[$150]
+
+_LCDI_Test:
+  push af
+  push hl
+
+  ; a = rLY - rLYC
+  ld hl, rLY
+  ld a, [hli]
+  sub [hl]
+
+  ;; Do something
+
+  reti
+
+
+
+
 SetSmallMem:
   .loop:
   ld [hli], a
@@ -133,7 +144,7 @@ InitLogo:
   xor a
   ld [rBGP], a
 
-  ; Copy sd tiles
+  ; Copy sd tiles ; TODO - create a matro for that (copyasset $8000, SD_tiles)
   ld de, SD_tiles
   ld hl, $8000
   ld bc, SD_tiles_end - SD_tiles
@@ -157,7 +168,7 @@ InitLogo:
   ld bc, Penguin_map_end - Penguin_map
   call CopyMemSub64 ; TODO - subtract 64 on the rom
 
-  ; Change jump on VBLANK WRAM
+  ; Change jump on VBLANK WRAM - TODO - make a macro (setvblank VBLANK_dec_e)
   ld hl, VBLANKF_wram + 1
   ld a, LOW(VBLANK_dec_e)
   ld [hli], a
@@ -261,7 +272,8 @@ VBLANK_dec_e:
 
 Init_Title: ; Call it on VBLANK
 
-  ; Clear OAM
+  ; Clear OAM ; TODO - make a macro?
+  ; TODO - xor a ?
   ld hl, _OAMRAM
   ld b, 160
   call SetSmallMem
@@ -289,6 +301,7 @@ Init_Title: ; Call it on VBLANK
   ld bc, Logo_map_end - Logo_map
   call CopyMem
 
+  ; Clear the rest of the tiles
   ld bc, $9c00 - ($9800 + Logo_map_end - Logo_map)
   call ResetMem
   
@@ -359,7 +372,7 @@ Init_Title: ; Call it on VBLANK
   call VBLANK_title_in ; Turn on screen and interupts
 
   .haltLoop: ; Keep here while not in game
-  nop;halt
+  nop;halt - TODO - halt
   ;call DS_Play
   ld a, [InGame]
   bit 0, a
@@ -725,6 +738,15 @@ SetScreen2:
   ld a, [hli]
   ld [rLCDC], a
   ret
+SetScreen1:
+  ld hl, Screen2X
+  ld a, [hli]
+  ld [rSCX], a
+  ld a, [hli]
+  ld [rSCY], a
+  ld a, [hli]
+  ld [rLCDC], a
+  ret
 
 VBLANK_title_in:
   call dmaCopy
@@ -760,7 +782,8 @@ VBLANK_title_in:
   .return
 
   call SetScreen2XY
-  call SetScreen2
+  call SetScreen1
+
 
   ; Return VBLANK_title
   pop hl
@@ -1119,7 +1142,7 @@ VBlank_Intro:
   reti 
 ;
 
-SECTION "Data", ROM0[$700] ; TODO - align
+SECTION "Data", ROM0[$700] ; TODO - remove this thing
 HVector:
   db $ff, $ff, $00, $ff, $00, $00, $00, $00 ;   8
   db $00, $00, $00, $00, $00, $00, $00, $00 ;  16
@@ -1136,7 +1159,7 @@ REPT 24
   db $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
 ENDR
 
-SinVec:
+SinVec: ; TODO - align at the end of ROM
 AMP = 15.0
   FOR N, 256        
       db (MUL(AMP, SIN(N * 256)) + AMP) >> 16
@@ -1297,4 +1320,4 @@ ATT = %00010000 ; att 7 - bellow bg, 6 - Y flip, 5 - X flip, 4 - palette
   ENDR
 HEARH_OAMS_end:
 
-include "DevSound.asm"
+include "DevSound/DevSound.asm"
